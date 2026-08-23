@@ -421,6 +421,8 @@ class GoogleDrive:
             return f"**ERROR:** ```{err}```"
 
     def upload_file(self, file_path, mimeType=None):
+        if ".." in file_path:
+            raise Exception("Invalid file path")
         mime_type = mimeType if mimeType else guess_type(file_path)[0]
         mime_type = mime_type if mime_type else "text/plain"
         controller = self._start_upload_session()
