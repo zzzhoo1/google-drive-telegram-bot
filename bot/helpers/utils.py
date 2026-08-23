@@ -92,6 +92,19 @@ def format_speed(speed: float) -> str:
 
 
 def extract_filename_from_url(url: str, default: str = "file") -> str:
+    """
+    Extract a safe filename from a URL.
+    
+    This function extracts a filename from either the URL path or query parameters,
+    and sanitizes it to prevent path traversal attacks.
+    
+    Args:
+        url: The URL to extract the filename from
+        default: Default filename if extraction fails
+        
+    Returns:
+        A sanitized filename safe for use in file operations
+    """
     if not url:
         return default
     parsed = urlparse(url)
@@ -105,9 +118,58 @@ def extract_filename_from_url(url: str, default: str = "file") -> str:
     for candidate in candidates:
         decoded = unquote(candidate).strip()
         if decoded and not decoded.endswith('/'):
+            # Remove control characters
             sanitized = re.sub(r"[\n\r]", "", decoded)
-            return sanitized
+            # Sanitize to prevent path traversal
+            sanitized = _sanitize_filename(sanitized)
+            if sanitized:
+                return sanitized
     return default
+
+
+def _sanitize_filename(filename: str) -> str:
+    """
+    Sanitize a filename to prevent path traversal attacks.
+    
+    This function removes or replaces dangerous characters and patterns that could
+    be used to escape the intended download directory, including:
+    - Path separators (/ and \)
+    - Parent directory references (..)
+    - Absolute path indicators
+    - Control characters
+    
+    Args:
+        filename: The filename to sanitize
+        
+    Returns:
+        A safe filename, or empty string if the input is invalid
+    """
+    if not filename:
+        return ""
+    
+    # Reject absolute paths (Unix and Windows)
+    if filename.startswith('/') or (len(filename) > 1 and filename[1] == ':'):
+        # Extract just the basename for absolute paths
+        filename = os.path.basename(filename)
+    
+    # Remove any remaining path separators and parent directory references
+    # This handles cases like "../../file", "..\\file", etc.
+    filename = filename.replace('..', '')
+    filename = filename.replace('/', '_')
+    filename = filename.replace('\\', '_')
+    
+    # Remove any null bytes and other control characters
+    filename = filename.replace('\x00', '')
+    filename = re.sub(r'[\x00-\x1f\x7f]', '', filename)
+    
+    # Strip leading/trailing whitespace and dots (which can be problematic on some filesystems)
+    filename = filename.strip('. \t')
+    
+    # Ensure the filename is not empty after sanitization
+    if not filename or filename in ('.', '..'):
+        return ""
+    
+    return filename
 
 
 def humanbytes(size: int) -> str:
