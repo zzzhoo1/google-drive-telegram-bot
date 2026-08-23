@@ -50,6 +50,8 @@ class MirrorTaskRunner:
         self._download_dir = os.path.join(DOWNLOAD_DIRECTORY, f"task_{self.id}")
         self._destination = os.path.join(self._download_dir, self.file_name)
         self._temp_path = self._destination + ".part"
+        # Validate paths to prevent directory traversal attacks
+        self._validate_paths()
         self._last_update = 0.0
         self._stage_start = time.monotonic()
         self._downloaded = record.processed_bytes
@@ -59,6 +61,40 @@ class MirrorTaskRunner:
         self._lock = asyncio.Lock()
         self._upload_pause_event = threading.Event()
         self._upload_pause_event.set()
+
+    def _validate_paths(self) -> None:
+        """
+        Validate that destination paths are within the intended download directory.
+        
+        This is a defense-in-depth measure to prevent path traversal attacks even if
+        filename sanitization is bypassed. It ensures that the resolved absolute paths
+        for both the destination and temporary files are within the task's download
+        directory.
+        
+        Raises:
+            ValueError: If path traversal is detected
+        """
+        # Resolve to absolute paths to detect traversal attempts
+        download_dir_abs = os.path.abspath(self._download_dir)
+        destination_abs = os.path.abspath(self._destination)
+        temp_path_abs = os.path.abspath(self._temp_path)
+        
+        # Ensure both paths are within the download directory
+        if not destination_abs.startswith(download_dir_abs + os.sep):
+            LOGGER.error(
+                "Path traversal detected: destination '%s' is outside download directory '%s'",
+                destination_abs,
+                download_dir_abs
+            )
+            raise ValueError("Invalid filename: path traversal detected")
+        
+        if not temp_path_abs.startswith(download_dir_abs + os.sep):
+            LOGGER.error(
+                "Path traversal detected: temp path '%s' is outside download directory '%s'",
+                temp_path_abs,
+                download_dir_abs
+            )
+            raise ValueError("Invalid filename: path traversal detected")
 
     async def refresh(self) -> MirrorTask:
         def op():

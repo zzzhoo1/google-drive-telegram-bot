@@ -138,6 +138,22 @@ def test_format_speed(speed, expected):
         ),
         ("https://example.com/path/%E4%BE%8B%E5%AD%90.txt", "file", "例子.txt"),
         ("https://example.com/path/bad%0Aname.txt", "file", "badname.txt"),
+        # Path traversal attack attempts - should be sanitized
+        ("https://example.com?filename=../../../etc/passwd", "file", "etcpasswd"),
+        ("https://example.com?filename=..%2F..%2Ftmp%2Fowned", "file", "tmpowned"),
+        ("https://example.com?filename=/etc/passwd", "file", "passwd"),
+        ("https://example.com?filename=..\\..\\windows\\system32\\config", "file", "windows_system32_config"),
+        ("https://example.com?filename=....//....//etc/passwd", "file", "etcpasswd"),
+        # Absolute paths should extract basename only
+        ("https://example.com?filename=/tmp/malicious.txt", "file", "malicious.txt"),
+        ("https://example.com?filename=C:\\Windows\\malicious.exe", "file", "malicious.exe"),
+        # Empty or invalid filenames after sanitization
+        ("https://example.com?filename=..", "file", "file"),
+        ("https://example.com?filename=.", "file", "file"),
+        ("https://example.com?filename=...", "file", "file"),
+        # Control characters and null bytes
+        ("https://example.com?filename=test%00.txt", "file", "test.txt"),
+        ("https://example.com?filename=test%01%02%03.txt", "file", "test.txt"),
     ],
 )
 def test_extract_filename_from_url(url, default, expected):
